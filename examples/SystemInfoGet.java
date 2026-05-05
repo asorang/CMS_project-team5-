@@ -20,15 +20,16 @@ public class SystemInfoGet {
         long ramTotal = ram.getTotal();
         long ramAvailable = ram.getAvailable();
 
-        // CPU 사용률을 측정하기 위해서는 CPU 틱 속도를 측정하여 해당 값을 기반으로 구한다
-        // 1초 대기해야 하므로 Thread.sleep(1000)을 사용, 오류가 나는 경우에는 main() 뒤에 throws InterruptedException 이 추가되었는지 꼭 확인하자!
+        // 방법 1
+        double cpuLoad = cpu.getSystemCpuLoad(1000L); // 실제 사용할 땐 100을 곱해야 함 (% 단위로 출력됨)
+
+        // 방법 2
         long[] prevTicks = cpu.getSystemCpuLoadTicks();
         Thread.sleep(1000);
         double cpuUsage = cpu.getSystemCpuLoadBetweenTicks(prevTicks) * 100.0;
 
-
         System.out.printf("[OS] " + os.toString() + "%n");
-        System.out.printf("[CPU] %s (%dC/%dT/%.1f%%)%n", cpu.getProcessorIdentifier().getName(), cpu.getPhysicalProcessorCount(), cpu.getLogicalProcessorCount(), cpuUsage);
+        System.out.printf("[CPU] %s (%dC/%dT/%.1f%%)%n", cpu.getProcessorIdentifier().getName(), cpu.getPhysicalProcessorCount(), cpu.getLogicalProcessorCount(), cpuLoad * 100);
         System.out.printf("[RAM] %dMB / %dMB%n", toMB(ramTotal - ramAvailable), toMB(ramTotal));
 
         // 디스크 정보를 가져올 때는 좀 복잡하다!
