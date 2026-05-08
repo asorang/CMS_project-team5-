@@ -1,13 +1,10 @@
 import oshi.SystemInfo;
 import oshi.hardware.*;
-import oshi.software.*;
 import oshi.software.os.OperatingSystem;
 
-import java.io.*;
 import java.net.*;
-import java.util.*;
 
-public class CmsClient {
+public class cmsAgent {
     // 프로그램 내부 변수
     static final int PORT = 10293;
     static String PASSWORD = "1234";
