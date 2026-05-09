@@ -1,0 +1,14 @@
+<component name="libraryTable">
+  <library name="github.oshi.core" type="repository">
+    <properties maven-id="com.github.oshi:oshi-core:7.0.1" />
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/com/github/oshi/oshi-core/7.0.1/oshi-core-7.0.1.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/com/github/oshi/oshi-common/7.0.1/oshi-common-7.0.1.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/net/java/dev/jna/jna-jpms/5.18.1/jna-jpms-5.18.1.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/net/java/dev/jna/jna-platform-jpms/5.18.1/jna-platform-jpms-5.18.1.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/org/slf4j/slf4j-api/2.0.17/slf4j-api-2.0.17.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
