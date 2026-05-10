@@ -28,14 +28,14 @@ import java.io.*;       // BufferReader, PrintWriter
    - totalDisk   : 설치된 총 디스크 용량                int    | GB 단위
 
    <주기적 정보 전송>
-   - cp          : CPU 사용량 %                         int
-   - uptime      : 시스템 업타임                        int
-   - ramUsed     : 총 사용 중인 RAM                     int    | GB 단위
-   - diskUsed    : 총 사용 중인 디스크                  int    | GB 단위
+   - cp         : CPU 사용량                           int
+   - uptime     : 시스템 업타임                        int
+   - ramUsed    : 총 사용 중인 RAM                     int    | GB 단위
+   - diskUsed   : 총 사용 중인 디스크                  int    | GB 단위
 
  [ Manager → Agent ]
-   - password : 평문 비밀번호                           String
-
+   - password   : 평문 비밀번호                       String
+   - cmd        : 시스템 명렁어                       String  | SHUTDOWN, REBOOT, LOCK (프로그램 실행 신호에도 나중에 활용할 거임.)
  주석으로 이거 쓰기 힘들다....
   ─────────────────────────────────────────────────────────────────────────────────────────────────────────── */
 
@@ -44,6 +44,8 @@ public class CmsAgent {
     static final int PORT = 10293;          // 포트번호
     static String PASSWORD = "1234";        // 통신용 비밀번호 (평문저장)
     static final int INTERVAL = 10;         // 시스템 정보 갱신(전송) 주기
+    static final boolean DEBUG_MODE = true; // 개발 중 플래그
+                                            // 개발 중에 동작하면 안 되는 기능이 있으면 if문 분기로 따로 빼서 사용할 것
 
     // OSHI Alias
     static final SystemInfo SI = new SystemInfo();                  // 시스템 정보 기본 객체
@@ -54,6 +56,7 @@ public class CmsAgent {
 
     public static void main(String[] args) throws Exception{
         try (ServerSocket server = new ServerSocket(PORT)){
+            System.out.println("매니저 프로그램 연결 대기 중");
             while (true){
                 Socket socket = server.accept();
                 System.out.println("매니저에 연결됨: " + socket.getInetAddress());
@@ -88,6 +91,16 @@ public class CmsAgent {
             // 시스템 정보와 프로그램 리스트
             out.println(systemInfo());
             // out.println(programList());
+
+            // 매니저에서 명령어 수신은 별개의 스레드로 처리한다 (Non-Blocking)
+            new Thread(() -> {
+                try{
+                    String systemCmd;
+                    while ((systemCmd = in.readLine()) != null) { systemCommand(systemCmd); }
+                }catch (Exception e){
+                    System.out.println("명령 수신 종료: " + e.getMessage());
+                }
+            }).start();
 
             // 시스템 상태 정보를 n초마다 전송
             while(!out.checkError()){ // <- 연결이 끊어질 때 while문 종료
@@ -124,7 +137,7 @@ public class CmsAgent {
         json.addProperty("ramUsed", toGB(ramUsed));
         json.addProperty("diskUsed", toGB(diskUsed));
 
-        System.out.println("[송신] " + json);
+        if (DEBUG_MODE){ System.out.println("[송신] " + json); }
         return json.toString();
     }
 
@@ -143,8 +156,36 @@ public class CmsAgent {
         json.addProperty("totalMemory", toGB(HAL.getMemory().getTotal()));
         json.addProperty("diskTotal", toGB(diskTotal));
 
-        System.out.println("[송신] " + json);
+        if (DEBUG_MODE){ System.out.println("[송신] " + json); }
         return json.toString();
+    }
+
+    // 시스템 조작 명령어 (컴퓨터 종료, 다시 시작 등) 를 처리하는 메서드
+    static void systemCommand(String json){
+        try{
+            JsonObject cmdJson = JsonParser.parseString(json).getAsJsonObject();
+            String cmd = cmdJson.get("cmd").getAsString();
+            System.out.println("[수신] " + json);
+
+            if (DEBUG_MODE) {
+                switch (cmd) {
+                    // 개발 중에는 단순 문장 출력으로 대체
+                    case "SHUTDOWN" -> System.out.println("[CMD] Shutdowm 명령 수신됨");
+                    case "REBOOT" -> System.out.println("[CMD] Reboot 명령 수신됨");
+                    case "LOCK" -> System.out.println("[CMD] PC 잠금 명령 수신됨");
+                    //case "EXEC" -> {} // 나중에 프로그램 실행 로직 구현할때 꺼내쓸거다 건드리지마라
+                }
+            }else {
+                switch (cmd) {
+                    // 실제 작동 시에는 컴퓨터 조작: 근데 개발중에는 컴퓨터가 꺼지면 굉장히 불미스럽겠죠? 그러니까 DEBUG_MODE를 True로 둡시다.
+                    case "SHUTDOWN" -> new ProcessBuilder("shutdown", "/s", "/t", "0").start();
+                    case "REBOOT"   -> new ProcessBuilder("shutdown", "/r", "/t", "0").start();
+                    case "LOCK"     -> new ProcessBuilder("rundll32.exe", "user32.dll,LockWorkStation").start();
+                }
+            }
+        }catch (Exception e) {
+            System.out.println("명령 처리 오류: " + e.getMessage());
+        }
     }
 
     private static long toMB(long bytes){
