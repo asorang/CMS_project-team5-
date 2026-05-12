@@ -9,6 +9,7 @@ public class CmsManager {
     // 고정 변수 (연결할 포트 번호는 10293 고정)
     static final int PORT = 10293;
     static final int INTERVAL = 10;
+    static final String AGENT_FILE = "agents.json";
     static Map<String, AgentConnection> agents = new HashMap<>();
 
     // 각 Agent의 정보를 처리하는 클래스
@@ -31,6 +32,7 @@ public class CmsManager {
     }
 
     public static void main(String[] args) {
+        loadAgents();
         Scanner scanner = new Scanner(System.in);
         System.out.println("명령어 입력 (CONNECT / SHUTDOWN / REBOOT / LOCK)");
 
@@ -80,6 +82,7 @@ public class CmsManager {
             // 인증이 성공한 경우 AgentConnection에 접속 정보를 전달 후 Map에 저장
             AgentConnection agent = new AgentConnection(alias, agentIP, agentPW, socket, out, in);
             agents.put(alias, agent);
+            saveAgents();
 
             // 수신 스레드
             // 그냥 수신만 할 때는 수신루프로도 가능했지만 이제는 송신도 하기 때문에,
@@ -123,5 +126,37 @@ public class CmsManager {
         json.addProperty("cmd", cmd);
         agent.out.println(json.toString());
         System.out.println("[송신 → " + alias + "] " + json);
+    }
+
+    static void saveAgents() {
+        JsonObject root = new JsonObject();
+        agents.forEach((alias, agent) -> {
+            JsonObject entry = new JsonObject();
+            entry.addProperty("ip",       agent.ip);
+            entry.addProperty("password", agent.pw);  // AgentConnection에 password 필드 추가 필요
+            entry.addProperty("alias",    alias);
+            root.add(alias, entry);
+        });
+        try (FileWriter fw = new FileWriter(AGENT_FILE)) {
+            fw.write(root.toString());
+        } catch (Exception e) {
+            System.out.println("저장 실패: " + e.getMessage());
+        }
+    }
+
+    static void loadAgents() {
+        File file = new File(AGENT_FILE);
+        if (!file.exists()) return;
+
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            JsonObject root = JsonParser.parseReader(br).getAsJsonObject();
+            root.entrySet().forEach(entry -> {
+                JsonObject agent = entry.getValue().getAsJsonObject();
+                String input = "CONNECT " + agent.get("ip").getAsString() + " " + agent.get("password").getAsString() + " " + agent.get("alias").getAsString();
+                connectAgent(input);
+            });
+        } catch (Exception e) {
+            System.out.println("불러오기 실패: " + e.getMessage());
+        }
     }
 }
