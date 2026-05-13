@@ -46,6 +46,7 @@ public class CmsManager {
             else if (input.startsWith("SHUTDOWN"))  sendCommand(input, "SHUTDOWN");
             else if (input.startsWith("REBOOT"))    sendCommand(input, "REBOOT");
             else if (input.startsWith("LOCK"))      sendCommand(input, "LOCK");
+            else if (input.startsWith("EXEC"))      sendCommand(input, "EXEC");
             else System.out.println("알 수 없는 명령어: " + input);
         }
     }
@@ -124,6 +125,11 @@ public class CmsManager {
 
         JsonObject json = new JsonObject();
         json.addProperty("cmd", cmd);
+
+        if (cmd.equals("EXEC") && parts.length >= 3) {
+            json.addProperty("index", Integer.parseInt(parts[2]));
+        }
+
         agent.out.println(json.toString());
         System.out.println("[송신 → " + alias + "] " + json);
     }

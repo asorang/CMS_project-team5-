@@ -6,11 +6,12 @@ import oshi.software.os.*;
 // GSON 라이브러리 (JSON Builder/Parser)
 import com.google.gson.JsonParser;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
 
 // Java 내장 라이브러리
 import java.net.*;      // 네트워크
 import java.io.*;       // BufferReader, PrintWriter
-
+import java.util.*;
 /*  ───────────────────────────────────────────────────────────────────────────────────────────────────────────
  ## API 명세 ##
  - 기본적으로 Socket을 사용하여 Agent-Manager간 통신할 때는 JSON을 사용한다
@@ -41,9 +42,12 @@ import java.io.*;       // BufferReader, PrintWriter
 
 public class CmsAgent {
     // 프로그램 내부 변수
-    static final int PORT = 10293;          // 포트번호
+    static int PORT = 10293;                // 포트번호
     static String PASSWORD = "1234";        // 통신용 비밀번호 (평문저장)
+
     static final int INTERVAL = 10;         // 시스템 정보 갱신(전송) 주기
+    static final String CONFIG_FILE = "config.json";
+    static final List<String[]> PROGRAMS = new ArrayList<>();
     static final boolean DEBUG_MODE = true; // 개발 중 플래그
                                             // 개발 중에 동작하면 안 되는 기능이 있으면 if문 분기로 따로 빼서 사용할 것
 
@@ -55,6 +59,8 @@ public class CmsAgent {
     static final OperatingSystem OS = SI.getOperatingSystem();      // 운영체제 정보
 
     public static void main(String[] args) throws Exception{
+        loadConfig();
+
         try (ServerSocket server = new ServerSocket(PORT)){
             System.out.println("매니저 프로그램 연결 대기 중");
             while (true){
@@ -62,6 +68,35 @@ public class CmsAgent {
                 System.out.println("매니저에 연결됨: " + socket.getInetAddress());
                 handleConnection(socket);
             }
+        }
+    }
+
+    // 설정 파일 읽어들이기 (프로그램 시작 시 실행)
+    static void loadConfig(){
+        File file = new File(CONFIG_FILE);
+        if (!file.exists()) {
+            System.out.println("설정 파일을 찾을 수 없습니다.");
+            System.exit(0);
+        }
+
+        // 설정파일이 있는 경우 해당 파일을 읽어들여서 비밀번호, 포트설정, 프로그램 리스트를 받아온다
+        // 여기서도 BufferedReader는 열일...
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            JsonObject root = JsonParser.parseReader(br).getAsJsonObject();
+
+            // JSON 파일에 비밀번호가 지정되어 있다면 그걸 사용 (if문 통과), 없다면 기본값을 사용한다
+            if (root.has("password")) PASSWORD = root.get("password").getAsString();
+
+            root.get("programs").getAsJsonArray().forEach(el -> {
+                JsonObject p = el.getAsJsonObject();
+                PROGRAMS.add(new String[]{
+                        p.get("name").getAsString(),
+                        p.get("path").getAsString()
+                });
+            });
+            System.out.println("설정 로드 완료. 프로그램 " + PROGRAMS.size() + "개");
+        } catch (Exception e) {
+            System.out.println("설정 로드 실패: " + e.getMessage());
         }
     }
 
@@ -90,7 +125,6 @@ public class CmsAgent {
 
             // 시스템 정보와 프로그램 리스트
             out.println(systemInfo());
-            // out.println(programList());
 
             // 매니저에서 명령어 수신은 별개의 스레드로 처리한다 (Non-Blocking)
             new Thread(() -> {
@@ -141,13 +175,15 @@ public class CmsAgent {
         return json.toString();
     }
 
-    // 시스템 정보(운영체제, 프로세서, 코어 수, 스레드 수, 총 메모리, 디스크 수)를 JSON 형태로 반환
+    // 시스템 정보 및 프로그램 바로가기 정보를 JSON 형태로 반환
+    // 원래는 별도의 함수로 나누려고 했는데 어차피 JSON인 거 한번에 뭉쳐서 보내는 게 낫겠더라....
     static String systemInfo(){
         long diskTotal = 0;
         for (OSFileStore fs : OS.getFileSystem().getFileStores()) {
             diskTotal += fs.getTotalSpace();
         }
 
+        // 컴퓨터 정보
         JsonObject json = new JsonObject();
         json.addProperty("os", OS.toString());
         json.addProperty("processor", CPU.getProcessorIdentifier().getName().toString());
@@ -155,6 +191,16 @@ public class CmsAgent {
         json.addProperty("threads", CPU.getLogicalProcessorCount());
         json.addProperty("totalMemory", toGB(HAL.getMemory().getTotal()));
         json.addProperty("diskTotal", toGB(diskTotal));
+
+        // 프로그램 리스트
+        JsonArray programs = new JsonArray();
+        for (String[] p : PROGRAMS) {
+            JsonObject entry = new JsonObject();
+            entry.addProperty("name", p[0]);
+            entry.addProperty("path", p[1]);
+            programs.add(entry);
+        }
+        json.add("programs", programs);
 
         if (DEBUG_MODE){ System.out.println("[송신] " + json); }
         return json.toString();
@@ -173,7 +219,8 @@ public class CmsAgent {
                     case "SHUTDOWN" -> System.out.println("[CMD] Shutdowm 명령 수신됨");
                     case "REBOOT" -> System.out.println("[CMD] Reboot 명령 수신됨");
                     case "LOCK" -> System.out.println("[CMD] PC 잠금 명령 수신됨");
-                    //case "EXEC" -> {} // 나중에 프로그램 실행 로직 구현할때 꺼내쓸거다 건드리지마라
+                    case "EXEC" -> System.out.println("[CMD] EXEC 명령 수신됨, index: " + cmdJson.get("index").getAsInt());
+
                 }
             }else {
                 switch (cmd) {
@@ -181,6 +228,10 @@ public class CmsAgent {
                     case "SHUTDOWN" -> new ProcessBuilder("shutdown", "/s", "/t", "0").start();
                     case "REBOOT"   -> new ProcessBuilder("shutdown", "/r", "/t", "0").start();
                     case "LOCK"     -> new ProcessBuilder("rundll32.exe", "user32.dll,LockWorkStation").start();
+                    case "EXEC"     -> {
+                        int index = cmdJson.get("index").getAsInt();
+                        if (index >= 0 && index < PROGRAMS.size()) new ProcessBuilder(PROGRAMS.get(index)[1]).start();
+                    }
                 }
             }
         }catch (Exception e) {
