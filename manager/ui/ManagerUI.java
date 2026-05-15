@@ -1,7 +1,14 @@
 package ui;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.*; // 스윙의 컴포넌트들(JFrame, JPanel, JButton 등)을 가져옴
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Insets;
 
 public class ManagerUI {
     public static void main(String[] args) {
@@ -17,7 +24,7 @@ public class ManagerUI {
         darkHeaderPanel.setBackground(new Color(100, 100, 100)); // 상단 헤더 배경색 어두운 색으로 설정함
         darkHeaderPanel.setPreferredSize(new Dimension(0, 25)); // 상단 헤더의 크기를 설정(가로 크기,세로 크기)
 
-        // 4. bodyPanel 생성 (몸통 패널, 위,가운데로 2개의 공간을 나눔 위는 +버튼 있는 줄, 가운데는 왼쪽 목록 + 오른쪽 상세정보를 담은 큰 영역)
+        // 4. bodyPanel 생성 (몸통 패널, 위,가운데로 2개의 공간을 나눔 위는 +버튼 있는 줄, 가운데는 왼쪽 목록과 오른쪽 상세정보를 담은 큰 영역)
         JPanel bodyPanel = new JPanel(new BorderLayout()); // 객체를 선언 및 생성하고 헤더 아래쪽 전체 영역을 만드는 패널임(이 안에는 위쪽:toolbarPanel,가운데:splitPanel이 들어감)
         bodyPanel.setBackground(Color.WHITE); // 이 몸통 본문 영역의 배경색을 흰색으로 설정함
 
