@@ -42,17 +42,23 @@ public class ManagerUI {
         splitPanel.setBorder(BorderFactory.createEmptyBorder(0, 15, 15, 15)); // splitPanel 안쪽 여백을 설정하는 코드(위 여백:0,왼:15,아래:15,오:15)
 
         // 7. leftPanel 생성
-        JPanel leftPanel = new JPanel(new BorderLayout()); // 객체를 선언 및 생성하고 왼쪽 PC목록 영역 만드는 코드임(처음엔 등록된 PC가 없어 안내문구만 있음, 왼쪽 패널은 BorderLayout()방식으로 배치가 됨)
-        leftPanel.setBackground(new Color(224, 224, 224)); // 왼쪽 패널 배경색을 연한 회색으로 설정함
-        leftPanel.setPreferredSize(new Dimension(250, 0)); // 왼쪽 패널의 크기를 설정함(가로,세로(세로는 레이아웃에 맡김))
+        JPanel leftPanel = new JPanel(new BorderLayout()); // 객체를 선언 및 생성하고 왼쪽 PC목록 영역 만드는 코드임
+        leftPanel.setPreferredSize(new Dimension(250, 0)); // 왼쪽 패널의 크기를 설정함(가로 너비, 세로 너비)
+        leftPanel.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY, 1)); // 왼쪽 패널 바깥쪽에 연한 회색 테두리 그림
 
-        // 8. emptyText 생성
-        JTextArea emptyText = new JTextArea("등록된 PC가 없습니다.\n상단의 + 버튼을 눌러 추가하세요."); // 객체를 선언 및 생성하고 왼쪽 패널에 표시할 안내 문구를 만드는 코드임(JTextArea는 여러줄 텍스트 생성)
-        emptyText.setFont(new Font("맑은 고딕", Font.PLAIN, 12)); // 안내 문구 폰트 설정함(글꼴 이름, 일반 굵기, 글자 크기)
-        emptyText.setBackground(new Color(224, 224, 224)); // 텍스트 영역 배경색을 연한 회색으로 설정함(왼쪽 패널과 같음 -> 자연스럽게 보기 위함)
-        emptyText.setEditable(false); // 사용자가 안내 문구 수정하지 못하게 하는 코드임
-        emptyText.setMargin(new Insets(20, 15, 10, 10)); // 텍스트 영역 내부 여백 설정(위 여백:20, 왼:15, 아래 10: 오:10)
-        leftPanel.add(emptyText, BorderLayout.NORTH); // 안내 문구를 왼쪽 패널 위쪽에 넣는 코드임(leftPanel은 BorderLayout()을 사용 중이기 때문에 BorderLayout.NORTH에 넣으면 위쪽에 붙음)
+        // 8. pcListPanel 생성 (원래 추가가 안되어있을땐 emptyText 부분이었는데, 추가를 하면 pcListPanel이 생성됨)
+        JPanel pcListPanel = new JPanel(new BorderLayout()); // 왼쪽 패널 안을 채울 큰 회색 패널을 만듬
+        pcListPanel.setBackground(new Color(224, 224, 224)); // 이 패널의 배경색을 회색으로 설정함
+
+        // 8-1. cardContainer 생성
+        JPanel cardContainer = new JPanel(new GridLayout(0, 1, 0, 0)); // PC의 카드들을 담는 내부 패널임(행 개수(자동증가), 열 1개, 가로 간격(0이라 x),세로 간격(0이라 x))
+        cardContainer.setBackground(new Color(224, 224, 224)); // 카드 묶음 패널 배경색도 회색으로 설정(카드 뒤쪽 배경이 부모 패널과 어색하게 다르게 보이지 않게 하기 위해서임)
+        cardContainer.add(createPcCard("PC-ONLINE", true, "CPU 36% RAM 25%")); // createPcCard()메서드로 온라인 pc카드 하나를 만들고(예시로 만듬)cardContainer에 추가(카드 제목,온라인 상태 유무,아래 설명 문구)
+        cardContainer.add(createPcCard("PC-OFFLINE", false, "클릭하여 다시 연결")); // 이건 오프라인 pc코드를 만든거임(예시로 만듬)(카드 제목,온라인 상태 유무, 아래 설명 문구)
+
+        // 8-2. pcListPanel에 cardContainer 넣기 (쉽게 설명하면 큰 패널안에 중간 패널을 넣고 작은 패널을 넣고 버튼,라벨,입력칸을 그 안에 넣는 구조라고 생각)
+        pcListPanel.add(cardContainer, BorderLayout.NORTH); // 큰 회색 상자(pcListPanel)안에서, cardContainer(카드 묶음 패널)를 위쪽에 붙임
+        leftPanel.add(pcListPanel, BorderLayout.CENTER); // 완성된 큰 회색 상자 pcListPanel을 leftPanel의 중앙에 넣음
 
         // 9. rightPanel 생성
         JPanel rightPanel = new JPanel(); // 객체를 선언 및 생성하고 오른쪽 상세 정보 영역을 만드는 코드임(현재는 빈 흰색 박스 상태)
@@ -66,7 +72,7 @@ public class ManagerUI {
         bodyPanel.add(toolbarPanel, BorderLayout.NORTH); // +버튼이 있는 툴바 영역을 bodyPanel 위쪽에 넣음
         bodyPanel.add(splitPanel, BorderLayout.CENTER); // 왼/오로 나누어진 영역을 bodyPanel 중앙에 넣음
 
-        // [수정] 어두운 헤더 조립 라인을 제거하고, 하얀 본문 영역(bodyPanel)이 contentPanel의 중심을 꽉 채우도록 설정함
+        // 어두운 헤더 조립 라인을 제거하고, 하얀 본문 영역(bodyPanel)이 contentPanel의 중심을 꽉 채우도록 설정함
         contentPanel.add(bodyPanel, BorderLayout.CENTER); // 본문 전체 영역을 contentPanel 중앙에 넣음
 
         frame.add(contentPanel); // 완성된 전체 UI 패널을 창에 넣는 코드임
@@ -113,5 +119,33 @@ public class ManagerUI {
 
         dialog.setLocationRelativeTo(parentFrame); // 팝업 창을 부모 창인 parentFrame 가운데 띄움
         dialog.setVisible(true); //팝업 창을 실제로 화면에 보이게 함(이게 실행되야 JDialog가 화면에 뜸)
+    }
+
+    // 13. createPcCard 메서드 (Pc카드 하나를 만들어 돌려주는 메서드임)
+    private static JPanel createPcCard(String name, boolean isOnline, String subText) { // Pc카드 하나를 만들어 돌려주는 메서드이고 매개변수() 의미는(PC이름, 온라인 여부, 아래 설명 문구)
+        JPanel card = new JPanel(new GridLayout(2, 1, 0, 3)); // 카드 하나를 JPanel로 만들고, 내부를 2행 1열로 나눔(제목 줄 + 설명 줄, 한 열, 가로 간격, 제목,설명 사이 세로 간격)
+        card.setBackground(Color.WHITE); // 카드의 배경색을 흰색으로 설정함
+
+        // 13-1. 카드 테두리 설정하는 부분임(왼쪽 리스트에서 pc목록 나열하는 부분 설정 코드)
+        card.setBorder(BorderFactory.createCompoundBorder( // createCompoundBorder()는 두 개의 테두리를 합치는 역할을 함 (그래서 PC목록이 하나로 이어진 리스트로 보임)
+                BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(224, 224, 224)), // 카드의 특정 방향에 선을 그림(위쪽 선,왼,아래,오, 선 색깔 -> 아래쪽만 얇은 구분선으로 카드들이 붙을 때 구분)
+                BorderFactory.createEmptyBorder(12, 15, 12, 15) // 카드 안쪽 여백을 설정함(위 여백,왼,아래,오 -> 카드 모서리에 붙지 않게 하는 역할)
+        ));
+
+        // 13-2. 온라인/오프라인 상태에 따른 초록색/빨간색 점 만들기(HTML 문법을 활용하여 아이콘 효과를 냄), Swing의 JLabel은 간단한 HTML을 지원해서 글자 색이나 굵기를 줄 수 있음
+        String dotColor = isOnline ? "green" : "red"; // 온라인 상태에 따라서 점 색을 정함 (isOnline이 true라면 green색 false라면 red색)
+        JLabel titleLabel = new JLabel("<html><font color='" + dotColor + "'>●</font> <b>" + name + "</b></html>"); // 카드 제목 줄을 만듬(화면에서 예를들면 "초록색 점 PC-ONLINE" 처럼 보임)
+        titleLabel.setFont(new Font("맑은 고딕", Font.PLAIN, 13)); // 제목 라벨의 글꼴 설정 (맑은 고딕, 일반 굵기, 크기 13)
+
+        // 13-3. 하단 서브 텍스트 (CPU 사양이나 연결 안내 문구 등)
+        JLabel subLabel = new JLabel(subText); // 카드 아래쪽에 설명 문구를 만듬 ( ex) CPU 36% RAM 25% 또는 클릭하여 다시 연결)
+        subLabel.setFont(new Font("맑은 고딕", Font.PLAIN, 11)); // 설명 문구의 폰트를 설정함 (제목 보다는 작게 보이게 해서 크기 11로)
+        subLabel.setForeground(Color.GRAY); // 글자색을 약간 흐린 회색으로 변경함
+
+        // 13-4. 카드 패널에 차례대로 조립함
+        card.add(titleLabel); // 카드 첫 번째 줄에 제목 라벨 넣음
+        card.add(subLabel); // 카드 두 번째 줄에 설명 라벨 넣음(GridLayout(2, 1)이니깐 순서대로 위,아래 배치가 됨)
+
+        return card; // 완성된 PC 카드 패널을 반환함(이러면 위에 cardContainer.add(createPcCard(...)); 처럼 바로 목록에 추가가 가능함)
     }
 }
