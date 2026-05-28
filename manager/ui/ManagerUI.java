@@ -1,18 +1,21 @@
 package ui;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import javax.swing.*;
 import java.awt.*;
-import java.util.Vector;
+
+// 기본 패키지에 위치한 main.CmsManager 임포트 (패키지 구조에 따라 수정 필요)
+import main.CmsManager;
 
 public class ManagerUI {
 
-    // 로직 및 백엔드 데이터 연동을 위한 JList 컴포넌트 정의
+    private final CmsManager backendEngine;
     private JList<PcAgentData> pcJList;
     private DefaultListModel<PcAgentData> listModel;
     private CardLayout rightCardLayout;
     private JPanel rightPanel;
 
-    // 상세 정보 화면의 가변 데이터 컴포넌트 정의
     private JLabel mainTitleLabel;
     private JLabel osValueLabel;
     private JLabel cpuValueLabel;
@@ -21,46 +24,31 @@ public class ManagerUI {
     private JProgressBar memoryProgressBar;
     private JLabel memoryValueLabel;
     private JComboBox<String> systemActionCombo;
+    private JLabel offlineTitleLabel;
 
-    /**
-     * 실행 진입점 메인 메서드
-     */
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            ManagerUI ui = new ManagerUI();
-            ui.drawUI();
-        });
+    public ManagerUI(main.CmsManager backendEngine) {
+        this.backendEngine = backendEngine;
     }
 
-    /**
-     * 메인 창(JFrame) 생성 및 조립
-     */
     public void drawUI() {
         JFrame frame = new JFrame("Manager Central Management System");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(950, 650);
         frame.setLocationRelativeTo(null);
 
-        // 메인 본문 패널 구성
         JPanel mainPanel = new JPanel(new BorderLayout());
         mainPanel.setBackground(Color.WHITE);
 
-        // 상단 툴바 레이어 추가 (+ 버튼 배치)
         mainPanel.add(createTopToolbar(frame), BorderLayout.NORTH);
-
-        // 좌/우 분할 레이어 추가 (PC 목록 및 상세 정보 대시보드)
         mainPanel.add(createCentralSplitLayout(frame), BorderLayout.CENTER);
 
         frame.add(mainPanel);
         frame.setVisible(true);
 
-        // [매핑 코드 추가] 프로그램 구동 직후 백엔드 API 또는 DB로부터 단말기 목록 초기화 데이터 갱신 로직 호출부
         loadBackendPcList();
     }
 
-    /**
-     * 1. 상단 툴바 레이어 생성 (+ 버튼)
-     */
+    //제일 위 아이콘들 관리
     private JPanel createTopToolbar(JFrame parentFrame) {
         JPanel toolbarPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 10));
         toolbarPanel.setBackground(Color.WHITE);
@@ -72,49 +60,63 @@ public class ManagerUI {
         addButton.setBackground(new Color(224, 224, 224));
         addButton.setBorder(BorderFactory.createEmptyBorder());
         addButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        // + 버튼 클릭 시 에이전트 등록 팝업창 활성화
         addButton.addActionListener(e -> showAddAgentDialog(parentFrame));
 
+        JButton refreshButton = new JButton("🔄");
+        refreshButton.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 16));
+        refreshButton.setPreferredSize(new Dimension(35, 35));
+        refreshButton.setFocusPainted(false);
+        refreshButton.setBackground(new Color(224, 224, 224));
+        refreshButton.setBorder(BorderFactory.createEmptyBorder());
+        refreshButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+        refreshButton.addActionListener(e -> {
+            // 1. 클릭 즉시 버튼 비활성화 및 로딩 아이콘 변경
+            refreshButton.setEnabled(false);
+            refreshButton.setText("⏳");
+
+            // 2. 백그라운드 스레드에서 무거운 네트워크 작업 실행
+            new Thread(() -> {
+                backendEngine.reloadAgents(); // 타임아웃이 걸리더라도 백그라운드라 UI는 안 멈춤
+
+                // 3. 작업이 끝나면 다시 UI 스레드로 돌아와서 화면 갱신
+                SwingUtilities.invokeLater(() -> {
+                    loadBackendPcList();
+                    rightCardLayout.show(rightPanel, "BLANK_VIEW");
+                    refreshButton.setText("🔄"); // 원상 복구
+                    refreshButton.setEnabled(true);
+                    JOptionPane.showMessageDialog(parentFrame, "최신 관제 목록을 백엔드 파일 저장소로부터 동기화함.", "완료", JOptionPane.INFORMATION_MESSAGE);
+                });
+            }).start();
+        });
+
         toolbarPanel.add(addButton);
+        toolbarPanel.add(refreshButton);
         return toolbarPanel;
     }
 
-    /**
-     * 2. 중앙 좌/우 분할 구조 레이어 생성
-     */
     private JPanel createCentralSplitLayout(JFrame parentFrame) {
         JPanel splitPanel = new JPanel(new BorderLayout(15, 0));
         splitPanel.setBackground(Color.WHITE);
         splitPanel.setBorder(BorderFactory.createEmptyBorder(0, 15, 15, 15));
 
-        // 좌측 영역 조립
         splitPanel.add(createLeftNavigationArea(), BorderLayout.WEST);
-
-        // 우측 영역 조립
         splitPanel.add(createRightDisplayArea(), BorderLayout.CENTER);
 
         return splitPanel;
     }
 
-    /**
-     * 3. 좌측 PC 목록 영역 생성 (JList 기반 설계)
-     */
     private JPanel createLeftNavigationArea() {
         JPanel leftPanel = new JPanel(new BorderLayout());
         leftPanel.setPreferredSize(new Dimension(260, 0));
         leftPanel.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY, 1));
 
-        // 동적 바인딩을 위한 리스트 모델 및 JList 객체 인스턴스화
         listModel = new DefaultListModel<>();
         pcJList = new JList<>(listModel);
         pcJList.setBackground(new Color(245, 245, 245));
         pcJList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-
-        // 가독성을 위한 JList 셀 렌더러 적용 (온라인/오프라인 디자인화)
         pcJList.setCellRenderer(new PcListCellRenderer());
 
-        // [매핑 코드 추가] JList 아이템 선택 변경 시 마우스 클릭 이벤트 바인딩 처리 리스너
         pcJList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 PcAgentData selectedPc = pcJList.getSelectedValue();
@@ -131,16 +133,13 @@ public class ManagerUI {
         return leftPanel;
     }
 
-    /**
-     * 4. 우측 상세 정보 화면 전환 레이어 생성 (CardLayout)
-     */
+    //PC목록
     private JPanel createRightDisplayArea() {
         rightCardLayout = new CardLayout();
         rightPanel = new JPanel(rightCardLayout);
         rightPanel.setBackground(Color.WHITE);
         rightPanel.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY, 1));
 
-        // 3가지 가상 룸 배치
         JPanel blankView = new JPanel(new BorderLayout());
         blankView.setBackground(Color.WHITE);
         JLabel defaultMessage = new JLabel("조회할 에이전트 PC를 좌측 목록에서 선택하십시오.", SwingConstants.CENTER);
@@ -159,31 +158,26 @@ public class ManagerUI {
         return rightPanel;
     }
 
-    /**
-     * 5. ONLINE_VIEW 상세 레이아웃 구조 설계
-     */
-    private JPanel createOnlineRoomLayout() {
+    //온라인 그리고 명령어 및 아래 컨트롤 창들
+    private JPanel createOnlineRoomLayout() {//옆에 pc 상세 화면 나오게 하는거
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(Color.WHITE);
         panel.setBorder(BorderFactory.createEmptyBorder(15, 20, 15, 20));
 
-        // 5-1. 헤더 영역 (명칭, IP, 삭제버튼)
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setBackground(Color.WHITE);
         headerPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Color.LIGHT_GRAY));
         headerPanel.setPreferredSize(new Dimension(0, 40));
 
-        mainTitleLabel = new JLabel("● PC-ONLINE (192.168.0.1)");
+        mainTitleLabel = new JLabel("● PC-ONLINE");
         mainTitleLabel.setFont(new Font("맑은 고딕", Font.BOLD, 15));
 
         JButton deleteButton = new JButton("삭제");
-        // [매핑 코드 추가] 백엔드 연동을 통한 에이전트 연결 해제 및 DB 삭제 명령어 처리부
         deleteButton.addActionListener(e -> handleAgentDelete());
 
         headerPanel.add(mainTitleLabel, BorderLayout.WEST);
         headerPanel.add(deleteButton, BorderLayout.EAST);
 
-        // 5-2. 메인 컨텐츠 영역
         JPanel contentPanel = new JPanel();
         contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
         contentPanel.setBackground(Color.WHITE);
@@ -195,7 +189,6 @@ public class ManagerUI {
         contentPanel.add(infoTitle);
         contentPanel.add(Box.createVerticalStrut(10));
 
-        // 하드웨어 스펙 테이블 그리드 구성
         JPanel sysGrid = new JPanel(new GridLayout(4, 2, 0, 8));
         sysGrid.setBackground(Color.WHITE);
         sysGrid.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -219,16 +212,12 @@ public class ManagerUI {
         contentPanel.add(sysGrid);
         contentPanel.add(Box.createVerticalStrut(25));
 
-        // 리소스 게이지바 구현부
         JPanel memHeader = new JPanel(new BorderLayout());
         memHeader.setBackground(Color.WHITE);
         memHeader.setAlignmentX(Component.LEFT_ALIGNMENT);
         memHeader.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
-        memHeader.add(new JLabel("실시간 메모리 사용 현황"), BorderLayout.WEST);
-        // 1. 객체 생성 시에는 텍스트만 전달함
-        memoryValueLabel = new JLabel("0 / 0 MB");
-
-// 2. 부모 패널에 넣을 때 오른쪽(EAST) 배치를 지정함
+        memHeader.add(new JLabel("메모리 사용량 (PC-사용시간)"), BorderLayout.WEST);
+        memoryValueLabel = new JLabel("0 GB Used", SwingConstants.RIGHT);
         memHeader.add(memoryValueLabel, BorderLayout.EAST);
         contentPanel.add(memHeader);
         contentPanel.add(Box.createVerticalStrut(10));
@@ -243,7 +232,6 @@ public class ManagerUI {
         contentPanel.add(memoryProgressBar);
         contentPanel.add(Box.createVerticalStrut(35));
 
-        // 제어 스크립트 실행 컨트롤부
         JPanel bottomRow = new JPanel(new GridLayout(1, 2, 20, 0));
         bottomRow.setBackground(Color.WHITE);
         bottomRow.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -251,12 +239,10 @@ public class ManagerUI {
 
         JPanel remotePanel = new JPanel(new BorderLayout());
         remotePanel.setBackground(Color.WHITE);
-        //remotePanel.add(" ", BorderLayout.NORTH);
-
 
         JPanel controlPanel = new JPanel(new BorderLayout());
         controlPanel.setBackground(Color.WHITE);
-        JLabel controlTitle = new JLabel("시스템 원격 명령어 할달");
+        JLabel controlTitle = new JLabel("시스템 원격 명령어 할당");
         controlTitle.setFont(new Font("맑은 고딕", Font.BOLD, 13));
         controlPanel.add(controlTitle, BorderLayout.NORTH);
 
@@ -268,7 +254,6 @@ public class ManagerUI {
         systemActionCombo.setBackground(Color.WHITE);
         JButton runButton = new JButton("명령 실행");
 
-        // [매핑 코드 추가] 컴보박스에서 선택된 제어 인덱스를 추출하여 호스트 패킷 송신 모듈로 명령어 패킷을 하달하는 구현부
         runButton.addActionListener(e -> handleSystemControlCommand());
 
         controlAction.add(systemActionCombo);
@@ -285,10 +270,8 @@ public class ManagerUI {
         return panel;
     }
 
-    /**
-     * 6. OFFLINE_VIEW 상세 레이아웃 구조 설계
-     */
-    private JPanel createOfflineRoomLayout() {
+    //오프라인
+    private JPanel createOfflineRoomLayout() {//오프라인 레이아웃
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(Color.WHITE);
         panel.setBorder(BorderFactory.createEmptyBorder(15, 20, 15, 20));
@@ -298,13 +281,13 @@ public class ManagerUI {
         headerPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Color.LIGHT_GRAY));
         headerPanel.setPreferredSize(new Dimension(0, 40));
 
-        JLabel offlineTitle = new JLabel("● PC-OFFLINE (연결 유실)");
-        offlineTitle.setFont(new Font("맑은 고딕", Font.BOLD, 15));
-        offlineTitle.setForeground(Color.RED);
+        offlineTitleLabel = new JLabel("● PC-OFFLINE (연결 유실)");
+        offlineTitleLabel.setFont(new Font("맑은 고딕", Font.BOLD, 15));
+        offlineTitleLabel.setForeground(Color.RED);
         JButton deleteButton = new JButton("삭제");
         deleteButton.addActionListener(e -> handleAgentDelete());
 
-        headerPanel.add(offlineTitle, BorderLayout.WEST);
+        headerPanel.add(offlineTitleLabel, BorderLayout.WEST);
         headerPanel.add(deleteButton, BorderLayout.EAST);
 
         JLabel errorLabel = new JLabel("해당 에이전트 단말기 네트워크와 소켓 세션 연결을 수립할 수 없습니다.", SwingConstants.CENTER);
@@ -316,9 +299,7 @@ public class ManagerUI {
         return panel;
     }
 
-    /**
-     * 7. 새로운 에이전트 단말 PC 등록 보조 모달 창 띄우기
-     */
+    //새로 추가할때 창
     private void showAddAgentDialog(JFrame parentFrame) {
         JDialog dialog = new JDialog(parentFrame, "새로운 원격 에이전트 디바이스 추가", true);
         dialog.setSize(340, 220);
@@ -344,14 +325,18 @@ public class ManagerUI {
 
         cancelButton.addActionListener(e -> dialog.dispose());
 
-        // [매핑 코드 추가] 입력창 데이터 파싱 검증 및 백엔드 데이터베이스 신규 에이전트 INSERT 쿼리 요청 로직 구현부
         connectButton.addActionListener(e -> {
             String targetIp = ipField.getText();
+            String targetPw = new String(passField.getPassword());
             String alias = aliasField.getText();
             if(!targetIp.isEmpty()) {
-                // 더미 데이터 바인딩 동작 예시
-                listModel.addElement(new PcAgentData(alias.isEmpty() ? "PC-AGENT" : alias, targetIp, true, "Win 11", "Intel i7", "16GB", "1TB", 35));
+                String commandStr = "CONNECT " + targetIp + " " + targetPw + " " + (alias.isEmpty() ? "PC-AGENT" : alias);
+                new Thread(() -> backendEngine.connectAgent(commandStr)).start();
+
                 dialog.dispose();
+                Timer timer = new Timer(1000, ev -> loadBackendPcList());
+                timer.setRepeats(false);
+                timer.start();
             }
         });
 
@@ -364,110 +349,209 @@ public class ManagerUI {
         dialog.setVisible(true);
     }
 
-    /**
-     * =========================================================================
-     * [백엔드 데이터 및 이벤트 처리 매핑 메서드 저장 공간]
-     * =========================================================================
-     */
+    //pc 정보 불러오는거
+    public void loadBackendPcList() {
+        // 1. 초기화 전 기존에 렌더링되어 있던 PC 데이터들을 IP를 키값으로 백업함
+        java.util.Map<String, PcAgentData> backupMap = new java.util.HashMap<>();
+        for (int i = 0; i < listModel.size(); i++) {
+            PcAgentData oldData = listModel.get(i);
+            backupMap.put(oldData.getIpAddress(), oldData);
+        }
 
-    /**
-     * [매핑 코드 추가] 백엔드 저장소로부터 등록된 단말 장치 데이터들을 동적 폴링하여 JList에 적재하는 영역
-     */
-    private void loadBackendPcList() {
-        // 실제 운영 환경에서는 데이터베이스 연동 및 REST API 응답 데이터를 활용함
-        // 아래 코드는 정상 매핑 검증을 위한 디버깅용 목업 데이터 세팅 모델 코드임
-        listModel.addElement(new PcAgentData("서버실-메인PC", "192.168.0.2", true, "Windows 11 Education", "AMD Ryzen 5600", "16,834 MB", "3,049 GB", 25));
-        listModel.addElement(new PcAgentData("개발실-테스트PC", "192.168.0.3", false, "Unknown", "Unknown", "Unknown", "Unknown", 0));
+        // 2. 리스트 비우기
+        listModel.clear();
+
+        // 3. 백엔드에서 최신 상태를 불러와서 리스트 재생성
+        CmsManager.agents.forEach((alias, agent) -> {
+            PcAgentData newData = new PcAgentData(agent.alias, agent.ip, agent.ON_state);
+
+            // 4. 백업본에 해당 IP의 예전 데이터(스펙, 사용량 등)가 남아있다면 새 객체로 복사(복원)함
+            if (backupMap.containsKey(agent.ip)) {
+                PcAgentData oldData = backupMap.get(agent.ip);
+                newData.setInitSpec(oldData.getOsInfo(), oldData.getCpuInfo(), oldData.getTotalMemory(), oldData.getTotalDisk());
+                newData.setRealtimeUsage(oldData.getCurrentCpu(), oldData.getCurrentRamUsed(), oldData.getCurrentDiskUsed(), oldData.getUptime());
+            }
+
+            listModel.addElement(newData);
+        });
     }
 
-    /**
-     * [매핑 코드 추가] JList 아이템 선택 이벤트를 수신하여 우측 CardLayout 뷰 컴포넌트에 변수를 바인딩하는 영역
-     */
+    //정보 받고 일치하는 애들 찾아서 매칭
+    public void updateRealtimeResource(String senderIp, String jsonPacket) {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                JsonObject json = JsonParser.parseString(jsonPacket).getAsJsonObject();
+
+                // 1. 현재 패킷을 보낸 IP와 일치하는 데이터 객체 찾기
+                PcAgentData targetData = null;
+                for (int i = 0; i < listModel.size(); i++) {
+                    if (listModel.get(i).getIpAddress().equals(senderIp)) {
+                        targetData = listModel.get(i);
+                        break;
+                    }
+                }
+                if (targetData == null) return;
+
+                // 2. 초기 스펙 패킷 수신 ("os" 키가 존재할 경우)
+                if (json.has("os")) {
+                    targetData.setInitSpec(
+                            json.get("os").getAsString(),
+                            json.get("processor").getAsString(),
+                            json.get("totalMemory").getAsInt(),
+                            json.get("diskTotal").getAsInt()
+                    );
+                }
+                // 3. 실시간 사용량 패킷 수신 ("cpu" 키가 존재할 경우)
+                else if (json.has("cpu")) {
+                    targetData.setRealtimeUsage(
+                            json.get("cpu").getAsInt(),
+                            json.get("ramUsed").getAsInt(),
+                            json.get("diskUsed").getAsInt(),
+                            json.get("uptime").getAsLong()
+                    );
+                }
+
+                // 4. 좌측 JList의 퍼센트 텍스트 갱신을 위해 다시 그리기 (Repaint)
+                pcJList.repaint();
+
+                // 5. 현재 사용자가 화면 우측에 이 PC를 띄워놓고 보고 있다면 우측 패널도 실시간 갱신
+                PcAgentData selectedPc = pcJList.getSelectedValue();
+                if (selectedPc != null && selectedPc.getIpAddress().equals(senderIp)) {
+                    bindPcDataToRightDetailPanel(selectedPc); // 갱신된 데이터로 덮어쓰기
+                }
+
+            } catch (Exception e) {
+                System.err.println("파싱 오류 무시");
+            }
+        });
+    }
+
+    //상세 정보 사용량 계산
     private void bindPcDataToRightDetailPanel(PcAgentData data) {
         if (data.isOnline()) {
             mainTitleLabel.setText("● " + data.getPcName() + " (" + data.getIpAddress() + ")");
             osValueLabel.setText(data.getOsInfo());
-            cpuValueLabel.setText(data.getCpuInfo());
-            ramValueLabel.setText(data.getRamInfo());
-            diskValueLabel.setText(data.getDiskInfo());
-            memoryProgressBar.setValue(data.getMemoryUsagePercent());
-            memoryValueLabel.setText((data.getMemoryUsagePercent() * 160) + " / 16834 MB");
+
+            // 초기 스펙 패킷이 도착해서 Total 값이 0보다 클 때만 퍼센트 계산 수행
+            if (data.getTotalMemory() > 0) {
+                int ramPercent = (int) Math.round((double) data.getCurrentRamUsed() / data.getTotalMemory() * 100.0);
+                int diskPercent = (int) Math.round((double) data.getCurrentDiskUsed() / data.getTotalDisk() * 100.0);
+
+                cpuValueLabel.setText(data.getCurrentCpu() + "% 사용 중 (" + data.getCpuInfo() + ")");
+                ramValueLabel.setText(data.getTotalMemory() + " GB (물리 메모리)");
+                diskValueLabel.setText(data.getCurrentDiskUsed() + " GB / " + data.getTotalDisk() + " GB (" + diskPercent + "% 사용)");
+
+                memoryProgressBar.setValue(ramPercent);
+                memoryValueLabel.setText(data.getCurrentRamUsed() + " GB / " + data.getTotalMemory() + " GB (" + ramPercent + "%) - " + data.getUptime() + "s 가동");
+            } else {
+                // 아직 스펙 패킷이 안 온 상태
+                cpuValueLabel.setText("시스템 정보 대기 중...");
+                ramValueLabel.setText("대기 중...");
+                diskValueLabel.setText("대기 중...");
+                memoryProgressBar.setValue(0);
+                memoryValueLabel.setText("실시간 OSHI 데이터 스트림 대기 중...");
+            }
 
             rightCardLayout.show(rightPanel, "ONLINE_VIEW");
         } else {
+            offlineTitleLabel.setText("● " + data.getPcName() + " (" + data.getIpAddress() + ") - 연결 끊김");
             rightCardLayout.show(rightPanel, "OFFLINE_VIEW");
         }
     }
 
-    /**
-     * [매핑 코드 추가] 에이전트 단말 데이터 원격 삭제 요청 처리 핸들러 영역
-     */
+    //제거 로직 json에서 특정 정보만 제거
     private void handleAgentDelete() {
         PcAgentData selected = pcJList.getSelectedValue();
         if (selected != null) {
-            int confirm = JOptionPane.showConfirmDialog(null, selected.getPcName() + " 단말을 관제 시스템에서 영구히 삭제하겠습니까?", "Warning", JOptionPane.YES_NO_OPTION);
+            int confirm = JOptionPane.showConfirmDialog(null, selected.getPcName() + " 단말을 영구히 삭제하겠습니까?", "Warning", JOptionPane.YES_NO_OPTION);
             if (confirm == JOptionPane.YES_OPTION) {
-                // 백엔드 삭제 API 호출 및 JList 실시간 컴포넌트 데이터 추방
+                CmsManager.AgentConnection target = main.CmsManager.agents.get(selected.getPcName());
+                if(target != null) {
+                    try { target.socket.close(); } catch(Exception ignored){}
+                    CmsManager.agents.remove(selected.getPcName());
+                    backendEngine.saveAgents();
+                }
                 listModel.removeElement(selected);
                 rightCardLayout.show(rightPanel, "BLANK_VIEW");
             }
         }
     }
 
-    /**
-     * [매핑 코드 추가] 원격 명령어 할달 처리 핸들러 영역 (시스템 종료 / 재부팅 / 잠금 패킷 하달 실행부)
-     */
+    //명령 입력 및 보내는거
     private void handleSystemControlCommand() {
         PcAgentData selected = pcJList.getSelectedValue();
-        String selectedCommand = (String) systemActionCombo.getSelectedItem();
+        String selectedCombo = (String) systemActionCombo.getSelectedItem();
 
         if (selected != null) {
-            JOptionPane.showMessageDialog(null,
-                    selected.getPcName() + " 단말 장치로 다음의 원격 제어 명령 패킷을 전달합니다:\n" + selectedCommand,
-                    "명령어 송신 완료",
-                    JOptionPane.INFORMATION_MESSAGE);
+            String cmdKeyword = "LOCK";
+            if (selectedCombo.contains("종료")) cmdKeyword = "SHUTDOWN";
+            else if (selectedCombo.contains("시작")) cmdKeyword = "REBOOT";
 
-            // TODO: ProcessBuilder 연동 네트워크 패킷 스트림 처리 로직 파이프라인 연계
+            String fakeConsoleInput = cmdKeyword + " " + selected.getPcName();
+            backendEngine.sendCommand(fakeConsoleInput, cmdKeyword);
+            /*
+            JOptionPane.showMessageDialog(null,
+                    selected.getPcName() + " 단말로 원격 명령어 패킷을 전달하였습니다: " + cmdKeyword,
+                    "명령 패킷 송신 완료", JOptionPane.INFORMATION_MESSAGE);*/
         }
     }
 
-    /**
-     * JList 객체 관리를 구조화하기 위한 단말 에이전트 인스턴스 정보 DTO 내부 클래스
-     */
-    private static class PcAgentData {
-        private final String pcName;
-        private final String ipAddress;
-        private final boolean isOnline;
-        private final String osInfo;
-        private final String cpuInfo;
-        private final String ramInfo;
-        private final String diskInfo;
-        private final int memoryUsagePercent;
+    //pc정보 매칭 시킬 변수들 즉 틀임
+    public static class PcAgentData {
+        private String pcName;
+        private String ipAddress;
+        private boolean isOnline;
 
-        public PcAgentData(String pcName, String ipAddress, boolean isOnline, String osInfo, String cpuInfo, String ramInfo, String diskInfo, int memoryUsagePercent) {
+        // 초기 스펙 데이터 (고정값)
+        private String osInfo = "대기 중...";
+        private String cpuInfo = "대기 중...";
+        private int totalMemory = 0; // GB
+        private int totalDisk = 0;   // GB
+
+        // 실시간 변동 데이터
+        private int currentCpu = 0;
+        private int currentRamUsed = 0;
+        private int currentDiskUsed = 0;
+        private long uptime = 0;
+
+        public PcAgentData(String pcName, String ipAddress, boolean isOnline) {
             this.pcName = pcName;
             this.ipAddress = ipAddress;
             this.isOnline = isOnline;
-            this.osInfo = osInfo;
-            this.cpuInfo = cpuInfo;
-            this.ramInfo = ramInfo;
-            this.diskInfo = diskInfo;
-            this.memoryUsagePercent = memoryUsagePercent;
         }
 
         public String getPcName() { return pcName; }
         public String getIpAddress() { return ipAddress; }
         public boolean isOnline() { return isOnline; }
+
+        // Getter
         public String getOsInfo() { return osInfo; }
         public String getCpuInfo() { return cpuInfo; }
-        public String getRamInfo() { return ramInfo; }
-        public String getDiskInfo() { return diskInfo; }
-        public int getMemoryUsagePercent() { return memoryUsagePercent; }
+        public int getTotalMemory() { return totalMemory; }
+        public int getTotalDisk() { return totalDisk; }
+        public int getCurrentCpu() { return currentCpu; }
+        public int getCurrentRamUsed() { return currentRamUsed; }
+        public int getCurrentDiskUsed() { return currentDiskUsed; }
+        public long getUptime() { return uptime; }
+
+        // Setter (초기 스펙 갱신용)
+        public void setInitSpec(String os, String cpu, int totalMem, int totalDisk) {
+            this.osInfo = os;
+            this.cpuInfo = cpu;
+            this.totalMemory = totalMem;
+            this.totalDisk = totalDisk;
+        }
+
+        // Setter (실시간 사용량 갱신용)
+        public void setRealtimeUsage(int cpu, int ramUsed, int diskUsed, long uptime) {
+            this.currentCpu = cpu;
+            this.currentRamUsed = ramUsed;
+            this.currentDiskUsed = diskUsed;
+            this.uptime = uptime;
+        }
     }
 
-    /**
-     * JList 가독성을 위해 동적 그래픽 변경을 적용한 GUI 커스텀 렌더러
-     */
+    //왼쪽 패널
     private static class PcListCellRenderer extends DefaultListCellRenderer {
         @Override
         public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
@@ -476,12 +560,7 @@ public class ManagerUI {
                     BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(224, 224, 224)),
                     BorderFactory.createEmptyBorder(12, 15, 12, 15)
             ));
-
-            if (isSelected) {
-                card.setBackground(new Color(210, 230, 245));
-            } else {
-                card.setBackground(Color.WHITE);
-            }
+            card.setBackground(isSelected ? new Color(210, 230, 245) : Color.WHITE);
 
             if (value instanceof PcAgentData) {
                 PcAgentData data = (PcAgentData) value;
@@ -489,7 +568,22 @@ public class ManagerUI {
                 JLabel titleLabel = new JLabel("<html><font color='" + dotColor + "'>●</font> <b>" + data.getPcName() + "</b></html>");
                 titleLabel.setFont(new Font("맑은 고딕", Font.PLAIN, 13));
 
-                JLabel subLabel = new JLabel(data.isOnline() ? "접속 IP: " + data.getIpAddress() : "네트워크 유실 - 다시 연결 시도 중");
+                // ----------------------------------------------------
+                // [이 부분이 변경됨] 퍼센트 계산하여 서브 라벨에 띄우기
+                // ----------------------------------------------------
+                String subText;
+                if (data.isOnline()) {
+                    if (data.getTotalMemory() > 0) {
+                        int ramPercent = (int) Math.round((double) data.getCurrentRamUsed() / data.getTotalMemory() * 100.0);
+                        subText = String.format("%s | CPU: %d%% | RAM: %d%%", data.getIpAddress(), data.getCurrentCpu(), ramPercent);
+                    } else {
+                        subText = data.getIpAddress() + " (시스템 스펙 수신 대기중...)";
+                    }
+                } else {
+                    subText = "네트워크 오프라인";
+                }
+
+                JLabel subLabel = new JLabel(subText);
                 subLabel.setFont(new Font("맑은 고딕", Font.PLAIN, 11));
                 subLabel.setForeground(Color.GRAY);
 
@@ -498,5 +592,21 @@ public class ManagerUI {
             }
             return card;
         }
+    }
+
+    //명령어 보낸거 확인 됐는지 확인하는 로직
+    public void showCommandResult(String alias, JsonObject ackJson) {
+        SwingUtilities.invokeLater(() -> {
+            String cmd = ackJson.has("cmd") ? ackJson.get("cmd").getAsString() : "알 수 없음";
+            String status = ackJson.has("status") ? ackJson.get("status").getAsString() : "UNKNOWN";
+            String msg = ackJson.has("message") ? ackJson.get("message").getAsString() : "";
+
+            int msgType = status.equals("SUCCESS") ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.ERROR_MESSAGE;
+            String title = status.equals("SUCCESS") ? "원격 명령 수행 성공" : "원격 명령 수행 실패";
+
+            JOptionPane.showMessageDialog(null,
+                    "[" + alias + "] 단말 응답 결과\n\n▶ 명령어: " + cmd + "\n▶ 처리 상태: " + status + "\n▶ 상세 메시지: " + msg,
+                    title, msgType);
+        });
     }
 }
