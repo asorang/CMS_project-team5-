@@ -1,5 +1,3 @@
-package ui;
-
 // 1. 라이브러리 부분
 import javax.swing.*; // Swing에서 JFrame, JPanel, JLabel, JTextField, JButton 같은 UI 컴포넌트들을 사용하기 위해 가져옴
 import javax.swing.border.EmptyBorder; // 패널 안쪽에서 빈 여백을 만들기 위해서 EmptyBorder라는 클래스를 가져옴
@@ -20,6 +18,12 @@ public class AgentSettingsUI extends JFrame { // AgentSettingsUI라는 클래스
     private JButton cancelButton; // 취소 버튼
     private JButton saveButton; // 저장 버튼
 
+    // 백엔드에서 전달받은 초기 설정값을 저장하는 변수들 (원본 설정값 저장 변수 부분)
+    private String originalPort = ""; // 처음 불러온 포트 번호를 저장함(처음 상태의 포트값을 기억해두는 역할이라고 보면됨)
+    private String originalPassword = ""; // 처음 불러온 암호 값을 저장함(초기 암호 값을 따로 저장하여 변경 여부를 확인할 수 있게함)
+    private String[] originalNames = new String[3]; // 처음 불러온 바로가기 이름 3개를 저장할 문자열 배열을 만듬(바로가기 1,2,3의 초기 이름 값을 기억해두는 역할임)
+    private String[] originalPaths = new String[3]; // 처음 불러온 바로가기 경로 3개를 저장할 문자열 배열을 만듬(바로가기 1,2,3의 초기 실행 파일 경로를 기억해두는 역할임)
+
     // 3. 생성자 부분
     public AgentSettingsUI() { // AgentSettingsUI 객체가 생성될 때 자동으로 실행되는 생성자임(에이전트 설정 창에서 기본 설정을 시작하는 부분임)
         // 이쪽 try,catch 부분 쓴 것은 설명이 길지만 한마디로 그냥 디자인쪽 코드라 생각하면 됨
@@ -39,7 +43,7 @@ public class AgentSettingsUI extends JFrame { // AgentSettingsUI라는 클래스
         setResizable(false); // 사용자가 혹시나 창 크기를 조절하지 못하게 함, 창 크기 고정(창 안에 여러 입력칸, 버튼칸 등이 정해져있기에 건들면 UI가 이상해져서 이렇게 설정함)
         getContentPane().setBackground(Color.WHITE); // JFrame 기본 영역 배경색을 흰색으로 설정함
 
-        initUI(); // 실제 UI 구성 요소를 만드는 initUI() 메서드를 호출함(여기서 상태 라벨, 포트 입력칸, 암호 입력칸 등 실제로 생성하고 배치함)
+        initUI(); // 실제 UI 구성 요소를 만드는 initUI() 메서드를 호출(여기서 상태 라벨, 포트 입력칸, 암호 입력칸 등 실제로 생성하고 배치함)
     }
 
     // 4. initUI 메서드 시작
@@ -57,7 +61,7 @@ public class AgentSettingsUI extends JFrame { // AgentSettingsUI라는 클래스
         mainPanel.add(Box.createRigidArea(new Dimension(0, 25))); // 상태 레벨 창 아래에 세로 25만큼의 빈 공간을 추가함(Box.createRigidArea()는 고정된 크기의 빈 공간을 만듬, 상태 라벨과 포트 입력 영역 사이에 적당한 간격을 만든다 생각하면 됨)
 
         // 4-2. 포트 및 암호 입력 영역
-        mainPanel.add(createInputRow("포트", portField = new JTextField())); // 포트 입력 행을 만들어 메인 패널에 추가함(createInputRow()는 왼쪽 라벨과 오른쪽 입력칸을 한 줄로 만들어주는 역할을 함)
+        mainPanel.add(createInputRow("포트", portField = new JTextField())); // 포트 입력 행을 만들어 메인 패널에 추가함(createInputRow()는 왼쪽 라벨과 오른쪽 입력칸 한 줄로 만들어주는 역할을 함)
         mainPanel.add(Box.createRigidArea(new Dimension(0, 15))); // 포트 입력칸과 암호 입력칸 사이에 세로 15만큼의 간격을 줌
         mainPanel.add(createInputRow("암호", passwordField = new JPasswordField())); // 암호 입력 행을 만들어 메인 패널에 추가함(JPasswordField는 비밀번호 입력 전용 필드라 입력 내용이 화면에 그대로 노출 x)
         mainPanel.add(Box.createRigidArea(new Dimension(0, 35))); // 암호 입력 영역 아래에 세로 35만큼 빈 공간을 추가함
@@ -136,7 +140,37 @@ public class AgentSettingsUI extends JFrame { // AgentSettingsUI라는 클래스
         return rowPanel; // 완성된 입력 행 패널을 반환함(이 반환값은 mainPanel.add(createInputRow(...))에서 사용되고 만들어진 행을 메인 화면에서 바로 추가 가능하게 됨)
     }
 
-    // 8. 백엔드 연동을 위한 데이터 추출 툴(Getter / Setter)
+    // 8. setInitialData 메서드(설정 창이 처음 열릴 때 기존 설정값을 화면에 표시하려고 사용되고, 예를들면 설정 파일이나 백엔드에서 포트, 암호, 바로가기 정보를 가져와 이 메서드에 넘겨주면, 그 값들이 화면 입력칸에 들어간다고 보면됨)
+    public void setInitialData(String port, String password, String[] names, String[] paths) { // 초기 포트, 암호, 바로가기 이름, 바로가기 경로 값을 UI입력칸에 넣어주는 메서드임(외부에서 받은 초기 설정 데이터를 설정 창에 적용하는 작업을 시작함)
+        this.originalPort = port; // 전달받은 포트 값을 originalPort에 저장함(여기서 port는 메서드로 전달받은 값, originalPort는 클래스 안에 있는 원본 저장용 변수임) 처음 불러온 포트 값을 원본 데이터로 기억해둠
+        this.originalPassword = password; // 전달받은 암호 값을  originalPassword에 저장함(나중에 암호를 바꿨는지 비교하려면 처음 암호 값을 따로 저장해야함 그래서 password 값을 originalPassword에 넣음) 처음 불러온 암호 값을 원본 데이터로 기억해둠
+        this.portField.setText(port); // 포트 입력칸에 전달받은 포트 값을 표시함(여기서 portField는 화면에 보이는 포트 입력칸,setText(port)를 사용하면 입력칸 안에 port 값이 들어감, 기존 포트 설정값을 UI입력칸에 보여줌)
+        this.passwordField.setText(password); // 암호 입력칸에 전달받은 암호 값을 표시함(여기서 passwordField는 JPasswordField이므로 암호 입력 전용 칸, setText(password)를 사용 시 암호 값이 입력칸에 들어가지만, 화면에서는 보통 그대로 보이지 않고 숨김 문자처럼 표시됨, 기존 암호 설정값을 실제 UI 암호 입력칸에 넣어주는 역할을 함)
+
+        for (int i = 0; i < 3; i++) { // 바로가기 1번~3번까지 반복해 초기값을 넣음(바로가기 3개의 이름과 경로를 차례대로 처리함)
+            // i번째 바로가기 이름이 null이 아니면 그 값을 저장하고, null이면 빈 문자열을 저장함(i번째 바로가기 이름의 원본 값을 저장하는 역할을 함)
+            this.originalNames[i] = (names[i] != null) ? names[i] : ""; // 삼항 연산자를 사용함(의미는 names[i]가 null이 아니면 names[i]를 사용하고, names[i]가 null이면 ""를 사용함)
+            this.shortcutNameFields[i].setText(this.originalNames[i]); // i번째 바로가기 이름 입력칸에 원본 이름 값을 표시함(바로 위의 originalNames[i]에 저장한 값을 실제 화면 입력칸에 넣고, 원본 이름이 있으면 그 이름 표시, 값 없으면 빈칸 표시)
+
+            // i번째 바로가기 경로가 null이 아니면 그 값을 저장하고, null이면 빈 문자열을 저장함(i번째 바로가기 경로의 원본 값을 저장하는 역할을 함)
+            this.originalPaths[i] = (paths[i] != null) ? paths[i] : ""; // 여기도 삼항 연산자 사용함(의미는 paths[i]에 실제 값이 있으면 그 값을 사용하고,값이 null이면 빈 문자열로 처리함)
+            this.shortcutPathFields[i].setText(this.originalPaths[i]); // i번째 바로가기 경로 입력칸에 원본 경로 값을 표시함(바로 위의 originalPaths[i]에 저장된 값을 실제 경로 입력칸에 넣고, 경로 값이 있으면 그 경로가 표시, 값 없으면 빈칸 표시)
+        }
+    }
+
+    // 9. isModified 메서드(이 메서드는 저장 버튼이나 취소 버튼을 눌렀을 때 "사용자가 설정을 바꿨는지" 확인하는데 사용함 그래서 boolean 자료형 사용함)
+    public boolean isModified() { // 현재 입력값이 처음 불러온 원본 값과 달라졌는지 확인하는 메서드임(즉 설정값 변경 여부 검사하는 작업을 여기서 함)
+        if (!getPort().equals(originalPort)) return true; // 현재 포트 값이 원본 포트 값과 다르면 true를 반환함(getPort()는 현재 포트 입력칸 값, originalPort는 처음 불러온 포트 값, 그리고 equals는 비교하는 메서드임) 즉, 포트 번호 변경을 확인하고 바뀌면 바로 변경된걸 알려줌
+        if (!getPassword().equals(originalPassword)) return true; // 현재 암호 값이 원본 암호 값과 다르면 true를 반환함(getPassword() 현재 암호 입력칸 값, originalPassword는 처음 저장된 암호 값임) 두 값이 다르면 암호를 수정한 것 이기에 다른 값 볼 필요x -> true 반환함 (암호가 변경됐는지 확인함)
+
+        for (int i = 0; i < 3; i++) { // 바로가기 1번~3번까지 반복해 변경 여부를 확인함(바로가기 이름,경로 3개를 차례대로 검사함)
+            if (!getShortcutName(i).equals(originalNames[i])) return true; // i번째 현재 바로가기 이름이 원본 이름과 다르면 true 반환함(바로가기 이름이 수정되었는지 확인함)
+            if (!getShortcutPath(i).equals(originalPaths[i])) return true; // i번째 현재 바로가기 경로가 원본 경로와 다르면 true 반환함(바로가기 실행 파일 경로가 변경 되었는지 확인함)
+        }
+        return false; // 모든 값을 비교해 바뀐 내용이 없다면 false 반환함(즉, 설정값이 변경되지 않았다는 결과를 반환함)
+    }
+
+    // 10. 백엔드 연동을 위한 데이터 추출 툴(Getter / Setter)
     public void setStatusIp(String ip) { // 전달받은 IP 주소를 상태 라벨에 표시하는 메서드임
         statusLabel.setText("에이전트가 " + ip + "에서 실행 중입니다."); // 처음은 "에이전트의 IP 상태를 확인하는 중입니다..."라고 표시되지만 이후 setStatusIp("192.168.0.15")를 호출하면 상태 문구가 바뀜
     }
@@ -145,19 +179,23 @@ public class AgentSettingsUI extends JFrame { // AgentSettingsUI라는 클래스
     public String getPassword() { return new String(passwordField.getPassword()); } // 암호 입력칸에 입력된 값을 문자열로 반환함(여기서 JPasswordField는 보안상 getText()보다는 getPassword()를 사용하였고, getPassword()는 문자 배열을 반환하기에 여기서는 new String(...)으로 문자열로 변환함)
 
     public String getShortcutName(int index) { // index 번호에 해당하는 바로가기 이름 입력값을 반환하는 역할을 함
-        if (index >= 0 && index < 3) return shortcutNameFields[index].getText(); // if (index >= 0 && index < 3)은 배열 범위를 벗어나지 않게 검사하는 코드임(index = 0 → 바로가기 1, index = 1 → 바로가기 2... 이런식임)
+        if (index >= 0 && index < 3) { // if (index >= 0 && index < 3)은 배열 범위를 벗어나지 않게 검사하는 코드임(index = 0 → 바로가기 1, index = 1 → 바로가기 2... 이런식임)
+            return shortcutNameFields[index].getText(); // index번째 바로가기 이름 입력칸에 들어 있는 텍스트를 그대로 반환함(즉 사용자가 입력한 바로가기 이름을 백엔드나 다른 코드에서 사용할 수 있게 반환함)
+        }
         return null; // 만약 잘못된 index가 들어오면 null을 반환함
     }
 
     public String getShortcutPath(int index) { // index 번호에 해당하는 바로가기 경로 입력값을 반환하는 역할을 함
-        if (index >= 0 && index < 3) return shortcutPathFields[index].getText(); // 구조는 앞의 getShortcutName()과 같음
-        return null;
+        if (index >= 0 && index < 3) { // 구조는 앞의 getShortcutName()과 같음
+            return shortcutPathFields[index].getText(); // index번째 바로가기 경로 입력칸에 들어 있는 텍스트를 그대로 반환함(즉 사용자가 입력한 바로가기 실행 파일 경로를 반환함)
+        }
+        return null; // index가 잘못된 경우 null을 반환함(배열 범위 벗어난 index일 경우)
     }
 
     public JButton getSaveButton() { return saveButton; } // 저장 버튼 객체를 반환함(이 메서드가 있으면 다른 클래스에서 버튼 이벤트 연결 가능하게 됨)
     public JButton getCancelButton() { return cancelButton; } // 취소 버튼 객체를 반환함(이 메서드가 있으면 다른 클래스에서 버튼 이벤트 연결 가능하게 됨)
 
-    // 9. main 실행 테스트 부분
+    // 11. main 실행 테스트 부분
     public static void main(String[] args) { // 이 프로그램이 실행되는 main 메서드임
         SwingUtilities.invokeLater(() -> { // Swing UI 생성 코드를 이벤트 처리 스레드에서 실행하도록 함
             AgentSettingsUI ui = new AgentSettingsUI(); // AgentSettingsUI 객체를 생성함
