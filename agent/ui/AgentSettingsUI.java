@@ -1,3 +1,5 @@
+package ui;
+
 // 1. 라이브러리 부분
 import javax.swing.*; // Swing에서 JFrame, JPanel, JLabel, JTextField, JButton 같은 UI 컴포넌트들을 사용하기 위해 가져옴
 import javax.swing.border.EmptyBorder; // 패널 안쪽에서 빈 여백을 만들기 위해서 EmptyBorder라는 클래스를 가져옴
