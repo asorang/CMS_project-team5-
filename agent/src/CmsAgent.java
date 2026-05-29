@@ -360,7 +360,7 @@ public class CmsAgent {
         popup.addSeparator();
         popup.add(exitItem);
 
-        TrayIcon trayIcon = new TrayIcon(iconOffline, "CMS Agent", popup);
+        trayIcon = new TrayIcon(iconOffline, "CMS Agent", popup);
         trayIcon.setImageAutoSize(true);
 
         // 더블클릭 시 설정 창 (AgentSettingUI) 표시
