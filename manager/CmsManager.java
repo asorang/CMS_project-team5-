@@ -130,8 +130,14 @@ public class CmsManager {
             json.addProperty("index", Integer.parseInt(parts[2]));
         }
 
-        agent.out.println(json.toString());
-        System.out.println("[송신 → " + alias + "] " + json);
+        String payload = json.toString();
+        JsonObject wrapper = new JsonObject();
+
+        wrapper.add("payload", json);
+        wrapper.addProperty("checksum", checksum(payload));
+
+        agent.out.println(wrapper.toString());
+        System.out.println("[송신 → " + alias + "] " + wrapper);
     }
 
     static void saveAgents() {
@@ -164,5 +170,11 @@ public class CmsManager {
         } catch (Exception e) {
             System.out.println("불러오기 실패: " + e.getMessage());
         }
+    }
+
+    static int checksum(String json) {
+        int sum = 0;
+        for (char c : json.toCharArray()) sum += c;
+        return sum;
     }
 }
