@@ -351,29 +351,38 @@ public class ManagerUI {
 
     //pc 정보 불러오는거
     public void loadBackendPcList() {
-        // 1. 초기화 전 기존에 렌더링되어 있던 PC 데이터들을 IP를 키값으로 백업함
+        // 1. [추가] 리스트 초기화 전, 사용자가 현재 보고 있던 PC의 IP를 기억함
+        PcAgentData currentSelected = pcJList.getSelectedValue();
+        String selectedIp = (currentSelected != null) ? currentSelected.getIpAddress() : null;
+
         java.util.Map<String, PcAgentData> backupMap = new java.util.HashMap<>();
         for (int i = 0; i < listModel.size(); i++) {
             PcAgentData oldData = listModel.get(i);
             backupMap.put(oldData.getIpAddress(), oldData);
         }
 
-        // 2. 리스트 비우기
         listModel.clear();
 
-        // 3. 백엔드에서 최신 상태를 불러와서 리스트 재생성
         CmsManager.agents.forEach((alias, agent) -> {
             PcAgentData newData = new PcAgentData(agent.alias, agent.ip, agent.ON_state);
 
-            // 4. 백업본에 해당 IP의 예전 데이터(스펙, 사용량 등)가 남아있다면 새 객체로 복사(복원)함
             if (backupMap.containsKey(agent.ip)) {
                 PcAgentData oldData = backupMap.get(agent.ip);
                 newData.setInitSpec(oldData.getOsInfo(), oldData.getCpuInfo(), oldData.getTotalMemory(), oldData.getTotalDisk());
                 newData.setRealtimeUsage(oldData.getCurrentCpu(), oldData.getCurrentRamUsed(), oldData.getCurrentDiskUsed(), oldData.getUptime());
             }
-
             listModel.addElement(newData);
         });
+
+        // 2. [추가] 리스트 재생성이 끝난 후, 아까 보고 있던 PC를 찾아서 다시 선택(Select) 상태로 만듦
+        if (selectedIp != null) {
+            for (int i = 0; i < listModel.size(); i++) {
+                if (listModel.get(i).getIpAddress().equals(selectedIp)) {
+                    pcJList.setSelectedIndex(i);
+                    break;
+                }
+            }
+        }
     }
 
     //정보 받고 일치하는 애들 찾아서 매칭
@@ -382,7 +391,7 @@ public class ManagerUI {
             try {
                 JsonObject json = JsonParser.parseString(jsonPacket).getAsJsonObject();
 
-                // 1. 현재 패킷을 보낸 IP와 일치하는 데이터 객체 찾기
+                // 1. 현재 패킷을 보낸 IP와 일치하는 데이터 찾기
                 PcAgentData targetData = null;
                 for (int i = 0; i < listModel.size(); i++) {
                     if (listModel.get(i).getIpAddress().equals(senderIp)) {
@@ -390,6 +399,20 @@ public class ManagerUI {
                         break;
                     }
                 }
+
+                // [추가된 핵심 방어 로직]
+                // UI 리스트에 등록되기 전에 스펙 패킷이 먼저 도착한 경우, 강제로 즉시 동기화 실행
+                if (targetData == null) {
+                    loadBackendPcList();
+                    for (int i = 0; i < listModel.size(); i++) {
+                        if (listModel.get(i).getIpAddress().equals(senderIp)) {
+                            targetData = listModel.get(i);
+                            break;
+                        }
+                    }
+                }
+
+                // 즉시 갱신을 했는데도 없다면 정말 잘못된 패킷이므로 무시
                 if (targetData == null) return;
 
                 // 2. 초기 스펙 패킷 수신 ("os" 키가 존재할 경우)
@@ -411,17 +434,17 @@ public class ManagerUI {
                     );
                 }
 
-                // 4. 좌측 JList의 퍼센트 텍스트 갱신을 위해 다시 그리기 (Repaint)
+                // 4. 좌측 JList 갱신
                 pcJList.repaint();
 
-                // 5. 현재 사용자가 화면 우측에 이 PC를 띄워놓고 보고 있다면 우측 패널도 실시간 갱신
+                // 5. 현재 사용자가 화면 우측에 이 PC를 띄워놓고 보고 있다면 우측 패널도 갱신
                 PcAgentData selectedPc = pcJList.getSelectedValue();
                 if (selectedPc != null && selectedPc.getIpAddress().equals(senderIp)) {
-                    bindPcDataToRightDetailPanel(selectedPc); // 갱신된 데이터로 덮어쓰기
+                    bindPcDataToRightDetailPanel(selectedPc);
                 }
 
             } catch (Exception e) {
-                System.err.println("파싱 오류 무시");
+                System.err.println("파싱 오류 무시: " + e.getMessage());
             }
         });
     }

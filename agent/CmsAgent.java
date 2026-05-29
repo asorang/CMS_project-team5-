@@ -217,6 +217,14 @@ public class CmsAgent {
 
             System.out.println("[수신] " + json);
 
+            // 실제 모드 성공 응답 세팅
+            ack.addProperty("status", "SUCCESS");
+            ack.addProperty("message", "명령어: " + cmd + "실행 완료");
+            // 완성된 ACK 패킷을 매니저로 송신
+            if (out != null) {
+                out.println(ack.toString());
+                System.out.println("[송신] " + ack.toString());
+            }
             if (DEBUG_MODE) {
                 switch (cmd) {
                     // 개발 중에는 단순 문장 출력으로 대체
@@ -226,9 +234,7 @@ public class CmsAgent {
                     case "EXEC" -> System.out.println("[CMD] EXEC 명령 수신됨, index: " + cmdJson.get("index").getAsInt());
 
                 }
-                // 디버그 모드 성공 응답 세팅
-                ack.addProperty("status", "SUCCESS");
-                ack.addProperty("message", "디버그 모드: " + cmd + " 가상 실행 완료");
+                return;
             }else {
                 switch (cmd) {
                     // 실제 작동 시에는 컴퓨터 조작: 근데 개발중에는 컴퓨터가 꺼지면 굉장히 불미스럽겠죠? 그러니까 DEBUG_MODE를 True로 둡시다.
@@ -240,15 +246,16 @@ public class CmsAgent {
                         if (index >= 0 && index < PROGRAMS.size()) new ProcessBuilder(PROGRAMS.get(index)[1]).start();
                     }
                 }
-                // 실제 모드 성공 응답 세팅
-                ack.addProperty("status", "SUCCESS");
-                ack.addProperty("message", "명령어가 정상적으로 시스템에 전달됨");
+
             }
         }catch (Exception e) {
             System.out.println("명령 처리 오류: " + e.getMessage());
         }
+
         // 완성된 ACK 패킷을 매니저로 송신
         if (out != null) {
+            ack.addProperty("status", "FAIL");
+            ack.addProperty("message", "명령어: 실행 실패");
             out.println(ack.toString());
             System.out.println("[송신] " + ack.toString());
         }
